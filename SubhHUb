@@ -1,0 +1,127 @@
+-- Moon Phase Detector for Blox Fruits
+-- UI: Rayfield Library
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "🌙 Moon Phase Detector",
+    LoadingTitle = "Moon ESP",
+    LoadingSubtitle = "Blox Fruits",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false,
+    ConfigurationSaving = { Enabled = false },
+    Discord = { Enabled = false },
+    KeySystem = false,
+})
+
+local Tab = Window:CreateTab("Moon Info", "moon")
+
+-- Moon phase labels used in Blox Fruits
+local MoonNames = {
+    [0] = "🌑 New Moon",
+    [1] = "🌒 Waxing Crescent",
+    [2] = "🌓 First Quarter",
+    [3] = "🌔 Waxing Gibbous",
+    [4] = "🌕 Full Moon",
+    [5] = "🌖 Waning Gibbous",
+    [6] = "🌗 Last Quarter",
+    [7] = "🌘 Waning Crescent",
+}
+
+-- Try to get the moon phase value from the game
+local function getMoonPhase()
+    local success, result = pcall(function()
+        -- Common locations in Blox Fruits for moon data
+        local rs = game:GetService("ReplicatedStorage")
+
+        -- Try MoonPhase value in ReplicatedStorage
+        if rs:FindFirstChild("MoonPhase") then
+            return rs.MoonPhase.Value
+        end
+
+        -- Try inside a folder
+        if rs:FindFirstChild("GameVariables") then
+            local gv = rs.GameVariables
+            if gv:FindFirstChild("MoonPhase") then
+                return gv.MoonPhase.Value
+            end
+        end
+
+        -- Fallback: estimate from Lighting clock time (rough)
+        local hour = game:GetService("Lighting").ClockTime
+        if hour >= 18 or hour < 6 then
+            return 4 -- treat nighttime as full moon fallback
+        end
+        return -1
+    end)
+    if success then return result end
+    return -1
+end
+
+-- Create UI elements
+local MoonLabel = Tab:CreateSection("Current Moon Phase")
+
+local MoonParagraph = Tab:CreateParagraph({
+    Title = "Moon Status",
+    Content = "Detecting..."
+})
+
+local IsFullMoonParagraph = Tab:CreateParagraph({
+    Title = "Full Moon Alert",
+    Content = "Checking..."
+})
+
+-- Toggle to enable/disable alerts
+local alertEnabled = true
+Tab:CreateToggle({
+    Name = "Full Moon Notification Alert",
+    CurrentValue = true,
+    Flag = "FullMoonAlert",
+    Callback = function(val)
+        alertEnabled = val
+    end
+})
+
+-- Last known phase (to avoid spam)
+local lastPhase = nil
+
+-- Update loop
+task.spawn(function()
+    while true do
+        local phase = getMoonPhase()
+        local phaseName = MoonNames[phase] or "❓ Unknown Phase (Index: " .. tostring(phase) .. ")"
+        local isFullMoon = (phase == 4)
+
+        -- Update paragraph
+        MoonParagraph:Set("Moon Status", phaseName)
+        IsFullMoonParagraph:Set(
+            "Full Moon Alert",
+            isFullMoon and "🌕 YES — Full Moon is ACTIVE!" or "❌ No Full Moon right now"
+        )
+
+        -- Notify on change
+        if alertEnabled and phase ~= lastPhase then
+            if isFullMoon then
+                Rayfield:Notify({
+                    Title = "🌕 Full Moon!",
+                    Content = "Full Moon is now active in this server!",
+                    Duration = 8,
+                    Image = "moon",
+                })
+            elseif lastPhase == 4 then
+                Rayfield:Notify({
+                    Title = "🌑 Full Moon Ended",
+                    Content = "The Full Moon has passed. Current: " .. phaseName,
+                    Duration = 6,
+                    Image = "moon",
+                })
+            end
+            lastPhase = phase
+        end
+
+        task.wait(5) -- Check every 5 seconds
+    end
+end)
+
+Rayfield:LoadConfiguration()
