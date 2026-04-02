@@ -1,40 +1,432 @@
--- Moon Phase Detector for Blox Fruits
--- UI: Rayfield Library
+-- ============================================================
+--   Blox Fruits | Elite Hunter Hop + Moon Detector
+--   UI: Rayfield Library
+--   Features:
+--     1. Auto Server Hop Elite Hunter (stops if God's Chalice found)
+--     2. Auto Moon Phase Detector
+-- ============================================================
 
+-- Load Rayfield
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
+-- ============================================================
+-- Anti AFK
+-- ============================================================
+game:GetService("Players").LocalPlayer.Idled:connect(function()
+    game:GetService("VirtualUser"):Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    wait(1)
+    game:GetService("VirtualUser"):Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ============================================================
+-- Sea Check
+-- ============================================================
+local placeId = game.PlaceId
+local ThirdSea = (placeId == 7449423635)
+
+-- ============================================================
+-- Global Flags
+-- ============================================================
+_G.AutoEliteHop  = false   -- Server Hop looking for Elite Hunter
+_G.StopOnChalice = true    -- Stop if God's Chalice is in inventory
+
+-- ============================================================
+-- Moon Texture ID Table
+-- ============================================================
+local MoonTextures = {
+    ["http://www.roblox.com/asset/?id=9709149431"] = { name = "🌕 Full Moon",       pct = "100%" },
+    ["http://www.roblox.com/asset/?id=9709149052"] = { name = "🌖 Waning Gibbous",  pct = "75%"  },
+    ["http://www.roblox.com/asset/?id=9709143733"] = { name = "🌗 Half Moon",        pct = "50%"  },
+    ["http://www.roblox.com/asset/?id=9709150401"] = { name = "🌘 Crescent Moon",    pct = "25%"  },
+    ["http://www.roblox.com/asset/?id=9709149680"] = { name = "🌑 New Moon",         pct = "15%"  },
+}
+
+local function GetMoonInfo()
+    local ok, sky = pcall(function()
+        return game:GetService("Lighting").Sky
+    end)
+    if not ok or not sky then
+        return { name = "☀️ Daytime / No Moon", pct = "0%" }
+    end
+    local id = sky.MoonTextureId
+    return MoonTextures[id] or { name = "☀️ Daytime / No Moon", pct = "0%" }
+end
+
+local function IsFullMoon()
+    local info = GetMoonInfo()
+    return info.pct == "100%"
+end
+
+-- ============================================================
+-- God's Chalice Check
+-- ============================================================
+local function HasGodsChalice()
+    local lp = game:GetService("Players").LocalPlayer
+    return  lp.Backpack:FindFirstChild("God's Chalice") ~= nil
+         or (lp.Character and lp.Character:FindFirstChild("God's Chalice") ~= nil)
+end
+
+-- ============================================================
+-- Elite Hunter Presence Check
+-- ============================================================
+local EliteNames = { "Diablo", "Deandre", "Urban" }
+
+local function IsElitePresent()
+    local rs = game:GetService("ReplicatedStorage")
+    local enemies = workspace:FindFirstChild("Enemies")
+    for _, name in ipairs(EliteNames) do
+        if rs:FindFirstChild(name) then return true, name end
+        if enemies and enemies:FindFirstChild(name) then return true, name end
+    end
+    return false, nil
+end
+
+local function GetEliteProgress()
+    local ok, val = pcall(function()
+        return game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("EliteHunter", "Progress")
+    end)
+    return ok and tostring(val) or "?"
+end
+
+-- ============================================================
+-- Server Hop Function (from source)
+-- ============================================================
+local function Hop()
+    local PlaceID = game.PlaceId
+    local AllIDs = {}
+    local foundAnything = ""
+    local actualHour = os.date("!*t").hour
+    local function TPReturner()
+        local Site
+        if foundAnything == "" then
+            Site = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100"))
+        else
+            Site = game.HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100&cursor=" .. foundAnything))
+        end
+        if Site.nextPageCursor and Site.nextPageCursor ~= "null" and Site.nextPageCursor ~= nil then
+            foundAnything = Site.nextPageCursor
+        end
+        local num = 0
+        for i, v in pairs(Site.data) do
+            local Possible = true
+            local ID = tostring(v.id)
+            if tonumber(v.maxPlayers) > tonumber(v.playing) then
+                for _, Existing in pairs(AllIDs) do
+                    if num ~= 0 then
+                        if ID == tostring(Existing) then Possible = false end
+                    else
+                        if tonumber(actualHour) ~= tonumber(Existing) then
+                            AllIDs = {}
+                            table.insert(AllIDs, actualHour)
+                        end
+                    end
+                    num = num + 1
+                end
+                if Possible then
+                    table.insert(AllIDs, ID)
+                    wait()
+                    pcall(function()
+                        game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceID, ID, game.Players.LocalPlayer)
+                    end)
+                    wait(4)
+                end
+            end
+        end
+    end
+    while wait() do
+        pcall(TPReturner)
+        if foundAnything ~= "" then pcall(TPReturner) end
+    end
+end
+
+-- ============================================================
+-- Rayfield Window
+-- ============================================================
 local Window = Rayfield:CreateWindow({
-    Name = "🌙 Moon Phase Detector",
-    LoadingTitle = "Moon ESP",
-    LoadingSubtitle = "Blox Fruits",
-    Theme = "Default",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings = false,
+    Name           = "🌙 Elite & Moon Hub",
+    LoadingTitle   = "Elite & Moon Hub",
+    LoadingSubtitle= "Blox Fruits Tool",
+    Theme          = "Default",
+    DisableRayfieldPrompts  = false,
+    DisableBuildWarnings    = false,
     ConfigurationSaving = { Enabled = false },
-    Discord = { Enabled = false },
+    Discord  = { Enabled = false },
     KeySystem = false,
 })
 
-local Tab = Window:CreateTab("Moon Info", "moon")
+-- ============================================================
+-- TAB 1: Elite Hunter Hop
+-- ============================================================
+local EliteTab = Window:CreateTab("⚔️ Elite Hunter", "swords")
 
--- Moon phase labels used in Blox Fruits
-local MoonNames = {
-    [0] = "🌑 New Moon",
-    [1] = "🌒 Waxing Crescent",
-    [2] = "🌓 First Quarter",
-    [3] = "🌔 Waxing Gibbous",
-    [4] = "🌕 Full Moon",
-    [5] = "🌖 Waning Gibbous",
-    [6] = "🌗 Last Quarter",
-    [7] = "🌘 Waning Crescent",
-}
+-- Status section
+Window:CreateSection("Elite Status", EliteTab)
 
--- Try to get the moon phase value from the game
-local function getMoonPhase()
-    local success, result = pcall(function()
-        -- Common locations in Blox Fruits for moon data
-        local rs = game:GetService("ReplicatedStorage")
+local EliteStatusLabel = EliteTab:CreateParagraph({
+    Title   = "Elite Boss Status",
+    Content = "Waiting..."
+})
 
+local ProgressLabel = EliteTab:CreateParagraph({
+    Title   = "Kills Progress",
+    Content = "..."
+})
+
+local ChaliceLabel = EliteTab:CreateParagraph({
+    Title   = "God's Chalice",
+    Content = "Checking inventory..."
+})
+
+-- Main Toggle: Auto Hop for Elite Hunter
+EliteTab:CreateToggle({
+    Name         = "Auto Server Hop (Elite Hunter)",
+    CurrentValue = false,
+    Flag         = "AutoEliteHopToggle",
+    Callback     = function(val)
+        _G.AutoEliteHop = val
+        if val then
+            Rayfield:Notify({
+                Title    = "Elite Hunter Hop",
+                Content  = "Started hopping for Elite Hunter!",
+                Duration = 4,
+                Image    = "swords",
+            })
+        else
+            Rayfield:Notify({
+                Title    = "Elite Hunter Hop",
+                Content  = "Stopped.",
+                Duration = 3,
+                Image    = "swords",
+            })
+        end
+    end
+})
+
+-- Toggle: Stop when God's Chalice found
+EliteTab:CreateToggle({
+    Name         = "Stop if God's Chalice in Inventory",
+    CurrentValue = true,
+    Flag         = "StopOnChaliceToggle",
+    Callback     = function(val)
+        _G.StopOnChalice = val
+    end
+})
+
+-- Manual Hop button
+EliteTab:CreateButton({
+    Name     = "Manual Server Hop",
+    Callback = function()
+        Rayfield:Notify({
+            Title    = "Hopping...",
+            Content  = "Switching server now.",
+            Duration = 3,
+            Image    = "wifi",
+        })
+        task.spawn(Hop)
+    end
+})
+
+-- ============================================================
+-- TAB 2: Moon Detector
+-- ============================================================
+local MoonTab = Window:CreateTab("🌕 Moon Detector", "moon")
+
+Window:CreateSection("Current Moon Phase", MoonTab)
+
+local MoonNameLabel = MoonTab:CreateParagraph({
+    Title   = "Moon Phase",
+    Content = "Detecting..."
+})
+
+local MoonPctLabel = MoonTab:CreateParagraph({
+    Title   = "Visibility",
+    Content = "..."
+})
+
+local FullMoonAlertLabel = MoonTab:CreateParagraph({
+    Title   = "Full Moon Active?",
+    Content = "Checking..."
+})
+
+-- Toggle: Notify on Full Moon detection
+local NotifyOnFullMoon = true
+MoonTab:CreateToggle({
+    Name         = "Notify When Full Moon Found",
+    CurrentValue = true,
+    Flag         = "NotifyMoonToggle",
+    Callback     = function(val)
+        NotifyOnFullMoon = val
+    end
+})
+
+-- Only show Third Sea hop moon toggle if in third sea
+if ThirdSea then
+    Window:CreateSection("Full Moon Server Hop", MoonTab)
+
+    MoonTab:CreateToggle({
+        Name         = "Auto Hop Until Full Moon",
+        CurrentValue = false,
+        Flag         = "AutoFindMoonToggle",
+        Callback     = function(val)
+            _G.AutoFindMoon = val
+            if val then
+                Rayfield:Notify({
+                    Title    = "Full Moon Hop",
+                    Content  = "Hopping servers until Full Moon...",
+                    Duration = 4,
+                    Image    = "moon",
+                })
+            else
+                Rayfield:Notify({
+                    Title    = "Full Moon Hop",
+                    Content  = "Stopped.",
+                    Duration = 3,
+                    Image    = "moon",
+                })
+            end
+        end
+    })
+end
+
+-- ============================================================
+-- BACKGROUND LOOPS
+-- ============================================================
+
+-- Loop 1: Elite Hunter status updater
+task.spawn(function()
+    while task.wait(1) do
+        pcall(function()
+            local present, name = IsElitePresent()
+            local progress       = GetEliteProgress()
+            local hasChalice     = HasGodsChalice()
+
+            EliteStatusLabel:Set(
+                "Elite Boss Status",
+                present
+                    and ("✅ ACTIVE — " .. (name or "Elite"))
+                    or  "❌ Not Spawned"
+            )
+
+            ProgressLabel:Set("Kills Progress", "Kills: " .. progress .. " / 30")
+
+            ChaliceLabel:Set(
+                "God's Chalice",
+                hasChalice
+                    and "🏆 God's Chalice is in your inventory!"
+                    or  "❌ Not found in inventory"
+            )
+        end)
+    end
+end)
+
+-- Loop 2: Auto Elite Hop logic
+task.spawn(function()
+    while task.wait(2) do
+        pcall(function()
+            if not _G.AutoEliteHop then return end
+
+            -- Stop condition: has chalice
+            if _G.StopOnChalice and HasGodsChalice() then
+                _G.AutoEliteHop = false
+                Rayfield:Notify({
+                    Title    = "🏆 God's Chalice Found!",
+                    Content  = "Stopping Elite Hunter Hop — Chalice is in inventory!",
+                    Duration = 8,
+                    Image    = "swords",
+                })
+                return
+            end
+
+            local present, name = IsElitePresent()
+
+            if present then
+                -- Elite is here! Stop hopping, notify
+                _G.AutoEliteHop = false
+                Rayfield:Notify({
+                    Title    = "⚔️ Elite Hunter Found!",
+                    Content  = (name or "Elite") .. " has spawned in this server!",
+                    Duration = 10,
+                    Image    = "swords",
+                })
+            else
+                -- No elite found, hop
+                Hop()
+            end
+        end)
+    end
+end)
+
+-- Loop 3: Moon phase updater
+local lastMoonName = ""
+task.spawn(function()
+    while task.wait(3) do
+        pcall(function()
+            local info     = GetMoonInfo()
+            local fullMoon = info.pct == "100%"
+
+            MoonNameLabel:Set("Moon Phase", info.name)
+            MoonPctLabel:Set("Visibility",  info.pct .. " brightness")
+            FullMoonAlertLabel:Set(
+                "Full Moon Active?",
+                fullMoon
+                    and "🌕 YES — Full Moon is ACTIVE!"
+                    or  "❌ No Full Moon right now"
+            )
+
+            -- Notify on moon change
+            if NotifyOnFullMoon and info.name ~= lastMoonName then
+                if fullMoon then
+                    Rayfield:Notify({
+                        Title    = "🌕 FULL MOON!",
+                        Content  = "Full Moon is now active in this server!",
+                        Duration = 8,
+                        Image    = "moon",
+                    })
+                elseif lastMoonName == "🌕 Full Moon" then
+                    Rayfield:Notify({
+                        Title    = "Moon Changed",
+                        Content  = "Full Moon ended. Now: " .. info.name,
+                        Duration = 5,
+                        Image    = "moon",
+                    })
+                end
+                lastMoonName = info.name
+            end
+        end)
+    end
+end)
+
+-- Loop 4: Auto Hop Full Moon (Third Sea only)
+if ThirdSea then
+    task.spawn(function()
+        while task.wait(2) do
+            pcall(function()
+                if not _G.AutoFindMoon then return end
+                if IsFullMoon() then
+                    _G.AutoFindMoon = false
+                    Rayfield:Notify({
+                        Title    = "🌕 Full Moon Found!",
+                        Content  = "Stopping hop — Full Moon is active here!",
+                        Duration = 8,
+                        Image    = "moon",
+                    })
+                else
+                    Hop()
+                end
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- Done
+-- ============================================================
+Rayfield:Notify({
+    Title    = "✅ Script Loaded",
+    Content  = "Elite Hunter Hop & Moon Detector ready!",
+    Duration = 5,
+    Image    = "check",
+})
         -- Try MoonPhase value in ReplicatedStorage
         if rs:FindFirstChild("MoonPhase") then
             return rs.MoonPhase.Value
