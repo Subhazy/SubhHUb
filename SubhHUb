@@ -23,9 +23,7 @@ local player  = Players.LocalPlayer
 local CommF_  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
 -- ─── Load Rayfield ───────────────────────────────────────────────────────────
-local Rayfield = loadstring(game:HttpGet(
-    "https://sirius.menu/rayfield"
-))()
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
 -- ─── Global Flags ────────────────────────────────────────────────────────────
 _G.AutoBones       = false
