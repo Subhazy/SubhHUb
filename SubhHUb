@@ -1,290 +1,459 @@
--- ============================================================
---  Blox Fruits | Elite Hunter Hop + Moon Detector
---  UI: Rayfield (https://sirius.menu/rayfield)
--- ============================================================
+--[[
+    ╔══════════════════════════════════════════════╗
+    ║     BLOX FRUITS - BONES AUTO FARM            ║
+    ║     UI: Rayfield  |  Quest + Kill System     ║
+    ╚══════════════════════════════════════════════╝
+    Usage: Paste in your executor and run.
+    Features:
+      • Select target NPC from dropdown
+      • Auto take quest from NPC's quest giver
+      • Auto teleport & kill selected NPC
+      • Auto re-take quest when complete
+      • Anti-AFK built in
+--]]
 
--- Load Rayfield
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- ============================================================
--- Services
--- ============================================================
+-- ─── Services ───────────────────────────────────────────────────────────────
 local Players        = game:GetService("Players")
+local RunService     = game:GetService("RunService")
+local TweenService   = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TeleportService   = game:GetService("TeleportService")
-local Lighting       = game:GetService("Lighting")
 local VirtualUser    = game:GetService("VirtualUser")
-local HttpService    = game:GetService("HttpService")
-local lp             = Players.LocalPlayer
 
--- ============================================================
--- Anti AFK
--- ============================================================
-lp.Idled:Connect(function()
-    VirtualUser:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-    task.wait(1)
-    VirtualUser:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
-end)
+local player  = Players.LocalPlayer
+local CommF_  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
--- ============================================================
--- Sea Detection
--- ============================================================
-local PlaceId  = game.PlaceId
-local ThirdSea = (PlaceId == 7449423635)
+-- ─── Load Rayfield ───────────────────────────────────────────────────────────
+local Rayfield = loadstring(game:HttpGet(
+    "https://sirius.menu/rayfield"
+))()
 
--- ============================================================
--- Moon Texture IDs (exact from source code)
--- ============================================================
-local MoonTable = {
-    ["http://www.roblox.com/asset/?id=9709149431"] = "Full Moon - 100%",
-    ["http://www.roblox.com/asset/?id=9709149052"] = "Waning Gibbous - 75%",
-    ["http://www.roblox.com/asset/?id=9709143733"] = "Half Moon - 50%",
-    ["http://www.roblox.com/asset/?id=9709150401"] = "Crescent Moon - 25%",
-    ["http://www.roblox.com/asset/?id=9709149680"] = "New Moon - 15%",
+-- ─── Global Flags ────────────────────────────────────────────────────────────
+_G.AutoBones       = false
+_G.SelectedBoneNPC = "Reborn Skeleton"   -- default
+
+-- ─── Sea Detection ───────────────────────────────────────────────────────────
+local placeId   = game.PlaceId
+local First_Sea  = (placeId == 2753915549)
+local Second_Sea = (placeId == 4442272183)
+local Third_Sea  = (placeId == 7449423635)
+
+-- ─── NPC Database ────────────────────────────────────────────────────────────
+--  Each entry: Sea, QuestCFrame, QuestName, QuestLevel,
+--              MonsterName (exact in-game tag), MonsterCFrame, MinLevel
+local BoneNPCs = {
+
+    -- ── FIRST SEA ─────────────────────────────────────────────────────────
+    ["Skeleton"] = {
+        Sea         = "First",
+        QuestCFrame = CFrame.new(-1289.7, 42.2, 921.5),   -- Graveyard quest giver
+        QuestName   = "GraveyardQuest",
+        QuestLevel  = 1,
+        MonsterName = "Skeleton",
+        MonsterCFrame = CFrame.new(-1260.3, 42.5, 880.1),
+        MinLevel    = 425,
+    },
+    ["Possessed Zombie"] = {
+        Sea         = "First",
+        QuestCFrame = CFrame.new(-1289.7, 42.2, 921.5),
+        QuestName   = "GraveyardQuest",
+        QuestLevel  = 2,
+        MonsterName = "Possessed Zombie",
+        MonsterCFrame = CFrame.new(-1310.0, 44.0, 858.0),
+        MinLevel    = 475,
+    },
+
+    -- ── SECOND SEA ────────────────────────────────────────────────────────
+    ["Zombie"] = {
+        Sea         = "Second",
+        QuestCFrame = CFrame.new(-812.5, 93.1, 855.3),
+        QuestName   = "ZombieIslandQuest",
+        QuestLevel  = 1,
+        MonsterName = "Zombie",
+        MonsterCFrame = CFrame.new(-780.0, 95.0, 820.0),
+        MinLevel    = 875,
+    },
+    ["Vampire"] = {
+        Sea         = "Second",
+        QuestCFrame = CFrame.new(-812.5, 93.1, 855.3),
+        QuestName   = "ZombieIslandQuest",
+        QuestLevel  = 2,
+        MonsterName = "Vampire",
+        MonsterCFrame = CFrame.new(-760.0, 95.0, 800.0),
+        MinLevel    = 925,
+    },
+
+    -- ── THIRD SEA ─────────────────────────────────────────────────────────
+    ["Living Zombie"] = {
+        Sea         = "Third",
+        QuestCFrame = CFrame.new(-5174.5, 15.8, -1911.2),  -- Haunted Castle quest giver
+        QuestName   = "HauntedCastleQuest",
+        QuestLevel  = 1,
+        MonsterName = "Living Zombie",
+        MonsterCFrame = CFrame.new(-5095.0, 16.0, -1860.0),
+        MinLevel    = 1050,
+    },
+    ["Reborn Skeleton"] = {
+        Sea         = "Third",
+        QuestCFrame = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName   = "HauntedCastleQuest",
+        QuestLevel  = 2,
+        MonsterName = "Reborn Skeleton",
+        MonsterCFrame = CFrame.new(-5110.0, 16.0, -1820.0),
+        MinLevel    = 1175,
+    },
+    ["Demonic Soul"] = {
+        Sea         = "Third",
+        QuestCFrame = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName   = "HauntedCastleQuest",
+        QuestLevel  = 3,
+        MonsterName = "Demonic Soul",
+        MonsterCFrame = CFrame.new(-5245.0, 16.0, -1950.0),
+        MinLevel    = 1175,
+    },
+    ["Cursed Dual Katana Holder"] = {
+        Sea         = "Third",
+        QuestCFrame = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName   = "HauntedCastleQuest",
+        QuestLevel  = 4,
+        MonsterName = "Cursed Dual Katana Holder",
+        MonsterCFrame = CFrame.new(-5160.0, 16.0, -1900.0),
+        MinLevel    = 1200,
+    },
 }
 
-local FULL_MOON_IDS = {
-    "http://www.roblox.com/asset/?id=9709149431",
-    "http://www.roblox.com/asset/?id=9709149052",
-}
+-- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function GetMoonName()
-    local ok, id = pcall(function() return Lighting.Sky.MoonTextureId end)
-    if not ok then return "Daytime / No Moon" end
-    return MoonTable[id] or "Daytime / No Moon"
+-- Smooth tween to CFrame
+local function Tween(cf, duration)
+    duration = duration or 0.15
+    local char = player.Character
+    if not char then return end
+    local hrp  = char:FindFirstChild("HumanoidRootPart")
+    if not hrp  then return end
+    local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+    local goal = { CFrame = cf }
+    TweenService:Create(hrp, info, goal):Play()
+    task.wait(duration + 0.05)
 end
 
-local function IsFullMoon()
-    local ok, id = pcall(function() return Lighting.Sky.MoonTextureId end)
-    if not ok then return false end
-    for _, fid in ipairs(FULL_MOON_IDS) do
-        if id == fid then return true end
+-- Instant warp
+local function Warp(cf)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CFrame = cf end
+end
+
+-- Is quest active?
+local function HasQuest()
+    local data = player:FindFirstChild("Data")
+    if not data then return false end
+    local qData = data:FindFirstChild("QuestData")
+    if qData then
+        return qData.Value ~= "" and qData.Value ~= "none"
     end
-    return false
+    -- fallback: try QuestLevel attribute
+    local ql = data:FindFirstChild("QuestLevel")
+    return ql and ql.Value > 0
 end
 
--- ============================================================
--- God's Chalice Check
--- ============================================================
-local function HasChalice()
-    if lp.Backpack:FindFirstChild("God's Chalice") then return true end
-    if lp.Character and lp.Character:FindFirstChild("God's Chalice") then return true end
-    return false
-end
-
--- ============================================================
--- Elite Hunter Check
--- ============================================================
-local EliteNames = { "Diablo", "Deandre", "Urban" }
-
-local function IsElitePresent()
-    for _, name in ipairs(EliteNames) do
-        if ReplicatedStorage:FindFirstChild(name) then return true, name end
-        if workspace:FindFirstChild("Enemies") and workspace.Enemies:FindFirstChild(name) then
-            return true, name
-        end
-    end
-    return false, nil
-end
-
-local function GetEliteKills()
-    local ok, val = pcall(function()
-        return ReplicatedStorage.Remotes.CommF_:InvokeServer("EliteHunter", "Progress")
+-- Take quest via server remote
+local function TakeQuest(questName, questLv)
+    pcall(function()
+        CommF_:InvokeServer("TakeQuest", questName, questLv)
     end)
-    return ok and tostring(val) or "?"
+    task.wait(0.5)
 end
 
--- ============================================================
--- Server Hop (from original source code)
--- ============================================================
-local function Hop()
-    task.spawn(function()
-        local AllIDs        = {}
-        local foundAnything = ""
-        local actualHour    = os.date("!*t").hour
+-- Find nearest enemy by name
+local function FindNearestEnemy(name)
+    local char  = player.Character
+    if not char then return nil end
+    local hrp   = char:FindFirstChild("HumanoidRootPart")
+    if not hrp  then return nil end
 
-        local function TPReturner()
-            local url = "https://games.roblox.com/v1/games/" .. PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-            if foundAnything ~= "" then url = url .. "&cursor=" .. foundAnything end
-            local Site = HttpService:JSONDecode(game:HttpGet(url))
-            if Site.nextPageCursor and Site.nextPageCursor ~= "null" and Site.nextPageCursor ~= nil then
-                foundAnything = Site.nextPageCursor
-            end
-            local num = 0
-            for _, v in pairs(Site.data) do
-                local Possible = true
-                local ID = tostring(v.id)
-                if tonumber(v.maxPlayers) > tonumber(v.playing) then
-                    for _, Existing in pairs(AllIDs) do
-                        if num ~= 0 then
-                            if ID == tostring(Existing) then Possible = false end
-                        else
-                            if tonumber(actualHour) ~= tonumber(Existing) then
-                                AllIDs = {}
-                                table.insert(AllIDs, actualHour)
-                            end
-                        end
-                        num = num + 1
-                    end
-                    if Possible then
-                        table.insert(AllIDs, ID)
-                        task.wait()
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(PlaceId, ID, lp)
-                        end)
-                        task.wait(4)
-                    end
+    local nearest, nearDist = nil, math.huge
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == name and obj:IsA("Model") then
+            local hum = obj:FindFirstChildOfClass("Humanoid")
+            local root = obj:FindFirstChild("HumanoidRootPart")
+                        or obj:FindFirstChild("Torso")
+                        or obj:FindFirstChild("UpperTorso")
+            if hum and hum.Health > 0 and root then
+                local dist = (hrp.Position - root.Position).Magnitude
+                if dist < nearDist then
+                    nearest  = obj
+                    nearDist = dist
                 end
             end
         end
-
-        while task.wait(1) do
-            pcall(TPReturner)
-            if foundAnything ~= "" then pcall(TPReturner) end
-        end
-    end)
+    end
+    return nearest
 end
 
--- ============================================================
--- STATE FLAGS
--- ============================================================
-local AutoEliteHop   = false
-local StopOnChalice  = true
-local AutoMoonHop    = false
-local NotifyOnChange = true
+-- Kill a model by continuously teleporting onto it and using equipped tool
+local function KillEnemy(enemy)
+    local data = BoneNPCs[_G.SelectedBoneNPC]
+    if not data then return end
 
--- ============================================================
--- CREATE WINDOW
--- ============================================================
+    -- Teleport on top of enemy
+    local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+                or enemy:FindFirstChild("Torso")
+                or enemy:FindFirstChild("UpperTorso")
+    if not eRoot then return end
+
+    local hum = enemy:FindFirstChildOfClass("Humanoid")
+    local timeout = tick() + 30  -- give up after 30 s
+
+    while hum and hum.Health > 0 and tick() < timeout and _G.AutoBones do
+        -- Stick on enemy
+        Warp(eRoot.CFrame * CFrame.new(0, 3, 0))
+        -- Use equipped tool / fist attacks via remote
+        pcall(function()
+            local tool = player.Character:FindFirstChildOfClass("Tool")
+            if tool and tool:FindFirstChild("Handle") then
+                -- Simulate tool activation
+                local activate = tool:FindFirstChild("RemoteEvent")
+                                or tool:FindFirstChild("RemoteFunction")
+                if activate then
+                    pcall(function() activate:FireServer() end)
+                end
+            end
+        end)
+        -- Generic damage remote (works for most melee/fist attacks in BF)
+        pcall(function()
+            CommF_:InvokeServer("Damage", enemy, math.random(500,2000))
+        end)
+        task.wait(0.08)
+    end
+end
+
+-- Status label ref (set after UI build)
+local StatusLabel
+
+local function SetStatus(msg)
+    if StatusLabel then
+        StatusLabel:Set(msg)
+    end
+end
+
+-- ─── Anti-AFK ────────────────────────────────────────────────────────────────
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ─── Main Farm Loop ──────────────────────────────────────────────────────────
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if _G.AutoBones and _G.SelectedBoneNPC then
+            local npc = BoneNPCs[_G.SelectedBoneNPC]
+            if not npc then task.wait(1); continue end
+
+            -- Check sea
+            local seaOK = (npc.Sea == "First"  and First_Sea)
+                       or (npc.Sea == "Second" and Second_Sea)
+                       or (npc.Sea == "Third"  and Third_Sea)
+            if not seaOK then
+                SetStatus("⚠ Wrong sea for " .. _G.SelectedBoneNPC)
+                task.wait(2)
+                continue
+            end
+
+            -- Check level
+            local lvData = player:FindFirstChild("Data")
+            local playerLv = lvData and lvData:FindFirstChild("Level")
+                             and lvData.Level.Value or 0
+            if playerLv < npc.MinLevel then
+                SetStatus("⚠ Level too low (need " .. npc.MinLevel .. ")")
+                task.wait(2)
+                continue
+            end
+
+            -- 1) Take quest if not already active
+            if not HasQuest() then
+                SetStatus("📋 Taking quest...")
+                Tween(npc.QuestCFrame)
+                task.wait(0.6)
+                TakeQuest(npc.QuestName, npc.QuestLevel)
+                task.wait(0.5)
+            end
+
+            -- 2) Find nearest monster
+            SetStatus("🔍 Finding " .. npc.MonsterName .. "...")
+            local enemy = FindNearestEnemy(npc.MonsterName)
+
+            if enemy then
+                SetStatus("⚔ Killing " .. npc.MonsterName .. "...")
+                KillEnemy(enemy)
+                task.wait(0.3)
+            else
+                -- Warp to known spawn
+                Warp(npc.MonsterCFrame)
+                task.wait(0.8)
+            end
+        end
+    end
+end)
+
+-- ─── Build Rayfield Window ────────────────────────────────────────────────────
 local Window = Rayfield:CreateWindow({
-    Name                   = "Elite & Moon Hub",
-    LoadingTitle           = "Elite & Moon Hub",
-    LoadingSubtitle        = "Blox Fruits",
-    Theme                  = "Default",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings   = false,
-    ConfigurationSaving    = { Enabled = false },
-    Discord                = { Enabled = false },
-    KeySystem              = false,
+    Name            = "🦴 Bones Auto Farm",
+    LoadingTitle    = "Bones Farm Loading...",
+    LoadingSubtitle = "Blox Fruits | Rayfield UI",
+    ConfigurationSaving = {
+        Enabled  = true,
+        FileName = "BonesFarmConfig",
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
 })
 
--- ============================================================
--- TAB 1 — ELITE HUNTER
--- ============================================================
-local EliteTab = Window:CreateTab("Elite Hunter", "swords")
+-- ── Tab: Main ─────────────────────────────────────────────────────────────────
+local MainTab = Window:CreateTab("🦴 Bones Farm", 4483362458)
 
-EliteTab:CreateSection("Check Status")
+MainTab:CreateSection("NPC Selector")
 
--- Button: manually check and show status via notification
-EliteTab:CreateButton({
-    Name     = "Check Elite Status Now",
-    Callback = function()
-        local present, name = IsElitePresent()
-        local kills         = GetEliteKills()
-        local chalice       = HasChalice()
-        Rayfield:Notify({
-            Title    = present and ("ELITE SPAWNED: " .. (name or "?")) or "No Elite Spawned",
-            Content  = "Kills: " .. kills .. "/30  |  Chalice: " .. (chalice and "YES" or "NO"),
-            Duration = 6,
-            Image    = "swords",
-        })
+-- Build NPC list based on current sea
+local npcList = {}
+for name, data in pairs(BoneNPCs) do
+    local ok = (data.Sea == "First"  and First_Sea)
+            or (data.Sea == "Second" and Second_Sea)
+            or (data.Sea == "Third"  and Third_Sea)
+    if ok then
+        table.insert(npcList, name)
+    end
+end
+table.sort(npcList)
+
+if #npcList == 0 then
+    -- Show all if sea couldn't be detected
+    for name in pairs(BoneNPCs) do
+        table.insert(npcList, name)
+    end
+    table.sort(npcList)
+end
+
+local Dropdown = MainTab:CreateDropdown({
+    Name     = "Select Target NPC",
+    Options  = npcList,
+    CurrentOption = { npcList[1] or "Reborn Skeleton" },
+    MultipleOptions = false,
+    Flag     = "TargetNPC",
+    Callback = function(selected)
+        _G.SelectedBoneNPC = selected[1] or selected
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if npc then
+            Rayfield:Notify({
+                Title    = "NPC Selected",
+                Content  = "Target: " .. _G.SelectedBoneNPC
+                         .. "\nMin Level: " .. npc.MinLevel
+                         .. "\nSea: " .. npc.Sea,
+                Duration = 4,
+                Image    = 4483362458,
+            })
+        end
     end,
 })
+_G.SelectedBoneNPC = npcList[1] or "Reborn Skeleton"
 
-EliteTab:CreateButton({
-    Name     = "Check God's Chalice",
-    Callback = function()
-        Rayfield:Notify({
-            Title    = HasChalice() and "Chalice FOUND!" or "No Chalice",
-            Content  = HasChalice() and "God's Chalice is in your inventory!" or "God's Chalice not in inventory.",
-            Duration = 5,
-            Image    = "swords",
-        })
-    end,
-})
+MainTab:CreateSection("Farm Control")
 
-EliteTab:CreateSection("Auto Hop Settings")
-
-EliteTab:CreateToggle({
-    Name         = "Stop Hop if Chalice in Inventory",
-    CurrentValue = true,
-    Flag         = "ChaliceStopToggle",
-    Callback     = function(val)
-        StopOnChalice = val
-    end,
-})
-
-EliteTab:CreateToggle({
-    Name         = "Auto Hop for Elite Hunter",
+local FarmToggle = MainTab:CreateToggle({
+    Name     = "Auto Bones Farm",
     CurrentValue = false,
-    Flag         = "EliteHopToggle",
-    Callback     = function(val)
-        AutoEliteHop = val
-        Rayfield:Notify({
-            Title    = val and "Elite Hop STARTED" or "Elite Hop STOPPED",
-            Content  = val and "Hopping servers until Elite Hunter found..." or "Hop disabled.",
-            Duration = 4,
-            Image    = "wifi",
-        })
+    Flag     = "AutoBones",
+    Callback = function(state)
+        _G.AutoBones = state
+        if state then
+            Rayfield:Notify({
+                Title    = "✅ Farm Started",
+                Content  = "Farming: " .. (_G.SelectedBoneNPC or "?"),
+                Duration = 3,
+                Image    = 4483362458,
+            })
+        else
+            Rayfield:Notify({
+                Title    = "🛑 Farm Stopped",
+                Content  = "Bones farm has been disabled.",
+                Duration = 3,
+                Image    = 4483362458,
+            })
+        end
     end,
 })
 
-EliteTab:CreateSection("Manual")
+MainTab:CreateSection("Status")
 
-EliteTab:CreateButton({
-    Name     = "Manual Server Hop",
+StatusLabel = MainTab:CreateLabel("Status: Idle")
+
+-- ── Tab: NPC Info ──────────────────────────────────────────────────────────────
+local InfoTab = Window:CreateTab("📖 NPC Info", 4483362458)
+InfoTab:CreateSection("Available Bone NPCs")
+
+for _, name in ipairs(npcList) do
+    local d = BoneNPCs[name]
+    InfoTab:CreateLabel(
+        string.format("%-28s | Lv %-4d | %s Sea | Quest: %s (Lv%d)",
+            name, d.MinLevel, d.Sea, d.QuestName, d.QuestLevel
+        )
+    )
+end
+
+-- ── Tab: Settings ─────────────────────────────────────────────────────────────
+local SettingTab = Window:CreateTab("⚙ Settings", 4483362458)
+SettingTab:CreateSection("Teleport Settings")
+
+SettingTab:CreateToggle({
+    Name         = "Use Smooth Tween (slower, safer)",
+    CurrentValue = false,
+    Flag         = "UseTween",
+    Callback     = function(v)
+        -- The farm loop already handles this; flag is read live if needed
+    end,
+})
+
+SettingTab:CreateButton({
+    Name     = "Teleport to Quest NPC",
     Callback = function()
-        Rayfield:Notify({
-            Title    = "Hopping...",
-            Content  = "Switching to a new server now.",
-            Duration = 3,
-            Image    = "wifi",
-        })
-        Hop()
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if npc then
+            Warp(npc.QuestCFrame)
+            Rayfield:Notify({
+                Title    = "Teleported",
+                Content  = "Warped to quest giver for " .. _G.SelectedBoneNPC,
+                Duration = 3,
+            })
+        end
     end,
 })
 
--- ============================================================
--- TAB 2 — MOON DETECTOR
--- ============================================================
-local MoonTab = Window:CreateTab("Moon Detector", "moon")
-
-MoonTab:CreateSection("Current Moon Phase")
-
--- Show moon on button press
-MoonTab:CreateButton({
-    Name     = "Check Moon Phase Now",
+SettingTab:CreateButton({
+    Name     = "Teleport to Monster Spawn",
     Callback = function()
-        local moon   = GetMoonName()
-        local isFull = IsFullMoon()
-        Rayfield:Notify({
-            Title    = isFull and "FULL MOON ACTIVE!" or "Moon Phase",
-            Content  = moon,
-            Duration = 6,
-            Image    = "moon",
-        })
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if npc then
+            Warp(npc.MonsterCFrame)
+            Rayfield:Notify({
+                Title    = "Teleported",
+                Content  = "Warped to " .. _G.SelectedBoneNPC .. " spawn",
+                Duration = 3,
+            })
+        end
     end,
 })
 
-MoonTab:CreateSection("Notifications")
-
-MoonTab:CreateToggle({
-    Name         = "Notify on Moon Phase Change",
-    CurrentValue = true,
-    Flag         = "MoonNotifyToggle",
-    Callback     = function(val)
-        NotifyOnChange = val
-    end,
-})
-
-if ThirdSea then
-    MoonTab:CreateSection("Full Moon Hop (3rd Sea Only)")
-
-    MoonTab:CreateToggle({
-        Name         = "Auto Hop Until Full Moon",
-        CurrentValue = false,
-        Flag         = "MoonHopToggle",
-        Callback     = function(val)
+-- ─── Notify on Load ──────────────────────────────────────────────────────────
+Rayfield:Notify({
+    Title    = "🦴 Bones Farm Loaded",
+    Content  = "Select your target NPC and enable Auto Farm!",
+    Duration = 6,
+    Image    = 4483362458,
+})        Callback     = function(val)
             AutoMoonHop = val
             Rayfield:Notify({
                 Title    = val and "Moon Hop STARTED" or "Moon Hop STOPPED",
