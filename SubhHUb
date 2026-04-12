@@ -1,40 +1,405 @@
 --[[
     ╔══════════════════════════════════════════════╗
-    ║     BLOX FRUITS - BONES AUTO FARM            ║
-    ║     UI: Rayfield  |  Quest + Kill System     ║
+    ║     BLOX FRUITS - BONES AUTO FARM v2         ║
+    ║     UI: Fluent  |  Quest + Kill System       ║
     ╚══════════════════════════════════════════════╝
-    Usage: Paste in your executor and run.
-    Features:
-      • Select target NPC from dropdown
-      • Auto take quest from NPC's quest giver
-      • Auto teleport & kill selected NPC
-      • Auto re-take quest when complete
-      • Anti-AFK built in
---]]
+]]
 
--- ─── Services ───────────────────────────────────────────────────────────────
-local Players        = game:GetService("Players")
-local RunService     = game:GetService("RunService")
-local TweenService   = game:GetService("TweenService")
+-- ─── Load Fluent (same library your main script uses) ────────────────────────
+local Fluent          = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Fluent.lua"))()
+local SaveManager     = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+if not Fluent then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title    = "Error",
+        Text     = "Fluent failed to load. Check your internet/executor.",
+        Duration = 8,
+    })
+    return
+end
+
+-- ─── Services ────────────────────────────────────────────────────────────────
+local Players           = game:GetService("Players")
+local TweenService      = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualUser    = game:GetService("VirtualUser")
+local VirtualUser       = game:GetService("VirtualUser")
 
-local player  = Players.LocalPlayer
-local CommF_  = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
+local player = Players.LocalPlayer
+local CommF_ = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("CommF_")
 
--- ─── Load Rayfield ───────────────────────────────────────────────────────────
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-
--- ─── Global Flags ────────────────────────────────────────────────────────────
+-- ─── Global Flags ─────────────────────────────────────────────────────────────
 _G.AutoBones       = false
-_G.SelectedBoneNPC = "Reborn Skeleton"   -- default
+_G.SelectedBoneNPC = ""
 
--- ─── Sea Detection ───────────────────────────────────────────────────────────
-local placeId   = game.PlaceId
+-- ─── Sea Detection ────────────────────────────────────────────────────────────
+local placeId    = game.PlaceId
 local First_Sea  = (placeId == 2753915549)
 local Second_Sea = (placeId == 4442272183)
 local Third_Sea  = (placeId == 7449423635)
 
+-- ─── NPC Database ─────────────────────────────────────────────────────────────
+local BoneNPCs = {
+    -- FIRST SEA
+    ["Skeleton"] = {
+        Sea           = "First",
+        QuestCFrame   = CFrame.new(-1289.7, 42.2, 921.5),
+        QuestName     = "GraveyardQuest",
+        QuestLevel    = 1,
+        MonsterName   = "Skeleton",
+        MonsterCFrame = CFrame.new(-1260.3, 42.5, 880.1),
+        MinLevel      = 425,
+    },
+    ["Possessed Zombie"] = {
+        Sea           = "First",
+        QuestCFrame   = CFrame.new(-1289.7, 42.2, 921.5),
+        QuestName     = "GraveyardQuest",
+        QuestLevel    = 2,
+        MonsterName   = "Possessed Zombie",
+        MonsterCFrame = CFrame.new(-1310.0, 44.0, 858.0),
+        MinLevel      = 475,
+    },
+    -- SECOND SEA
+    ["Zombie"] = {
+        Sea           = "Second",
+        QuestCFrame   = CFrame.new(-812.5, 93.1, 855.3),
+        QuestName     = "ZombieIslandQuest",
+        QuestLevel    = 1,
+        MonsterName   = "Zombie",
+        MonsterCFrame = CFrame.new(-780.0, 95.0, 820.0),
+        MinLevel      = 875,
+    },
+    ["Vampire"] = {
+        Sea           = "Second",
+        QuestCFrame   = CFrame.new(-812.5, 93.1, 855.3),
+        QuestName     = "ZombieIslandQuest",
+        QuestLevel    = 2,
+        MonsterName   = "Vampire",
+        MonsterCFrame = CFrame.new(-760.0, 95.0, 800.0),
+        MinLevel      = 925,
+    },
+    -- THIRD SEA
+    ["Living Zombie"] = {
+        Sea           = "Third",
+        QuestCFrame   = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName     = "HauntedCastleQuest",
+        QuestLevel    = 1,
+        MonsterName   = "Living Zombie",
+        MonsterCFrame = CFrame.new(-5095.0, 16.0, -1860.0),
+        MinLevel      = 1050,
+    },
+    ["Reborn Skeleton"] = {
+        Sea           = "Third",
+        QuestCFrame   = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName     = "HauntedCastleQuest",
+        QuestLevel    = 2,
+        MonsterName   = "Reborn Skeleton",
+        MonsterCFrame = CFrame.new(-5110.0, 16.0, -1820.0),
+        MinLevel      = 1175,
+    },
+    ["Demonic Soul"] = {
+        Sea           = "Third",
+        QuestCFrame   = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName     = "HauntedCastleQuest",
+        QuestLevel    = 3,
+        MonsterName   = "Demonic Soul",
+        MonsterCFrame = CFrame.new(-5245.0, 16.0, -1950.0),
+        MinLevel      = 1175,
+    },
+    ["Cursed Dual Katana Holder"] = {
+        Sea           = "Third",
+        QuestCFrame   = CFrame.new(-5174.5, 15.8, -1911.2),
+        QuestName     = "HauntedCastleQuest",
+        QuestLevel    = 4,
+        MonsterName   = "Cursed Dual Katana Holder",
+        MonsterCFrame = CFrame.new(-5160.0, 16.0, -1900.0),
+        MinLevel      = 1200,
+    },
+}
+
+-- ─── Helper Functions ─────────────────────────────────────────────────────────
+
+local function Warp(cf)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CFrame = cf end
+end
+
+local function HasQuest()
+    local data = player:FindFirstChild("Data")
+    if not data then return false end
+    local qd = data:FindFirstChild("QuestData")
+    if qd then return qd.Value ~= "" and qd.Value ~= "none" end
+    local ql = data:FindFirstChild("QuestLevel")
+    return ql and ql.Value > 0
+end
+
+local function TakeQuest(questName, questLv)
+    pcall(function()
+        CommF_:InvokeServer("TakeQuest", questName, questLv)
+    end)
+    task.wait(0.5)
+end
+
+local function FindNearestEnemy(name)
+    local char = player.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local nearest, nearDist = nil, math.huge
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.Name == name and obj:IsA("Model") then
+            local hum  = obj:FindFirstChildOfClass("Humanoid")
+            local root = obj:FindFirstChild("HumanoidRootPart")
+                      or obj:FindFirstChild("Torso")
+            if hum and hum.Health > 0 and root then
+                local dist = (hrp.Position - root.Position).Magnitude
+                if dist < nearDist then
+                    nearest  = obj
+                    nearDist = dist
+                end
+            end
+        end
+    end
+    return nearest
+end
+
+local function KillEnemy(enemy)
+    local hum  = enemy:FindFirstChildOfClass("Humanoid")
+    local root = enemy:FindFirstChild("HumanoidRootPart")
+              or enemy:FindFirstChild("Torso")
+    if not hum or not root then return end
+    local timeout = tick() + 30
+    while hum and hum.Health > 0 and tick() < timeout and _G.AutoBones do
+        Warp(root.CFrame * CFrame.new(0, 3, 0))
+        pcall(function()
+            CommF_:InvokeServer("Damage", enemy, math.random(500, 2000))
+        end)
+        task.wait(0.08)
+    end
+end
+
+-- Status update (Fluent paragraph reference)
+local StatusParagraph
+
+local function SetStatus(msg)
+    if StatusParagraph then
+        pcall(function() StatusParagraph:SetDesc(msg) end)
+    end
+end
+
+-- ─── Anti-AFK ─────────────────────────────────────────────────────────────────
+player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ─── Main Farm Loop ───────────────────────────────────────────────────────────
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if not (_G.AutoBones and _G.SelectedBoneNPC ~= "") then continue end
+
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if not npc then task.wait(1); continue end
+
+        -- Sea check
+        local seaOK = (npc.Sea == "First"  and First_Sea)
+                   or (npc.Sea == "Second" and Second_Sea)
+                   or (npc.Sea == "Third"  and Third_Sea)
+        if not seaOK then
+            SetStatus("⚠ Wrong sea for " .. _G.SelectedBoneNPC)
+            task.wait(2); continue
+        end
+
+        -- Level check
+        local lvData  = player:FindFirstChild("Data")
+        local playerLv = lvData and lvData:FindFirstChild("Level")
+                         and lvData.Level.Value or 0
+        if playerLv < npc.MinLevel then
+            SetStatus("⚠ Level too low! Need " .. npc.MinLevel)
+            task.wait(2); continue
+        end
+
+        -- Take quest if not active
+        if not HasQuest() then
+            SetStatus("📋 Going to quest NPC...")
+            Warp(npc.QuestCFrame)
+            task.wait(0.8)
+            TakeQuest(npc.QuestName, npc.QuestLevel)
+            SetStatus("📋 Quest taken!")
+            task.wait(0.5)
+        end
+
+        -- Find & kill enemy
+        SetStatus("🔍 Searching for " .. npc.MonsterName .. "...")
+        local enemy = FindNearestEnemy(npc.MonsterName)
+        if enemy then
+            SetStatus("⚔ Killing " .. npc.MonsterName .. "...")
+            KillEnemy(enemy)
+            task.wait(0.3)
+        else
+            SetStatus("🏃 Warping to spawn...")
+            Warp(npc.MonsterCFrame)
+            task.wait(0.8)
+        end
+    end
+end)
+
+-- ─── Build NPC List for current Sea ──────────────────────────────────────────
+local npcList = {}
+for name, data in pairs(BoneNPCs) do
+    local ok = (data.Sea == "First"  and First_Sea)
+            or (data.Sea == "Second" and Second_Sea)
+            or (data.Sea == "Third"  and Third_Sea)
+    if ok then table.insert(npcList, name) end
+end
+table.sort(npcList)
+if #npcList == 0 then
+    for name in pairs(BoneNPCs) do table.insert(npcList, name) end
+    table.sort(npcList)
+end
+_G.SelectedBoneNPC = npcList[1] or ""
+
+-- ─── Build Fluent Window ──────────────────────────────────────────────────────
+local Window = Fluent:CreateWindow({
+    Title      = "🦴 Bones Auto Farm",
+    SubTitle   = "Blox Fruits | Fluent UI",
+    TabWidth   = 160,
+    Size       = UDim2.fromOffset(520, 340),
+    Acrylic    = true,
+    Theme      = "Dark",
+    MinimizeKey = Enum.KeyCode.RightShift,
+})
+
+local Options = Fluent.Options
+
+-- ── Tab: Farm ─────────────────────────────────────────────────────────────────
+local FarmTab = Window:AddTab({ Title = "Bones Farm", Icon = "bone" })
+
+FarmTab:AddSection("Select Target NPC")
+
+FarmTab:AddDropdown("BoneNPCDropdown", {
+    Title   = "Target NPC",
+    Values  = npcList,
+    Default = npcList[1],
+    Multi   = false,
+    Description = "Choose which NPC to kill for bones",
+    Callback = function(val)
+        _G.SelectedBoneNPC = val
+        local npc = BoneNPCs[val]
+        if npc then
+            Fluent:Notify({
+                Title   = "NPC Selected",
+                Content = val .. " (Min Lv " .. npc.MinLevel .. " | " .. npc.Sea .. " Sea)",
+                Duration = 4,
+            })
+        end
+    end,
+})
+
+FarmTab:AddSection("Farm Control")
+
+FarmTab:AddToggle("ToggleAutoBones", {
+    Title       = "Auto Bones Farm",
+    Default     = false,
+    Description = "Automatically take quest, kill NPC, and farm bones",
+    Callback    = function(val)
+        _G.AutoBones = val
+        if val then
+            Fluent:Notify({
+                Title   = "✅ Farm Started",
+                Content = "Farming: " .. (_G.SelectedBoneNPC ~= "" and _G.SelectedBoneNPC or "None selected"),
+                Duration = 3,
+            })
+        else
+            SetStatus("⏸ Idle")
+            Fluent:Notify({
+                Title   = "🛑 Farm Stopped",
+                Content = "Bones farm disabled.",
+                Duration = 3,
+            })
+        end
+    end,
+})
+
+FarmTab:AddSection("Live Status")
+
+StatusParagraph = FarmTab:AddParagraph({
+    Title   = "Status",
+    Content = "⏸ Idle — Enable Auto Farm to start",
+})
+
+-- ── Tab: Teleport ─────────────────────────────────────────────────────────────
+local TpTab = Window:AddTab({ Title = "Teleport", Icon = "map-pin" })
+
+TpTab:AddSection("Manual Teleport")
+
+TpTab:AddButton({
+    Title       = "Go to Quest NPC",
+    Description = "Teleport to the quest giver for selected NPC",
+    Callback    = function()
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if npc then
+            Warp(npc.QuestCFrame)
+            Fluent:Notify({ Title = "Teleported", Content = "Warped to quest NPC", Duration = 3 })
+        else
+            Fluent:Notify({ Title = "Error", Content = "Select an NPC first!", Duration = 3 })
+        end
+    end,
+})
+
+TpTab:AddButton({
+    Title       = "Go to Monster Spawn",
+    Description = "Teleport directly to the monster's spawn location",
+    Callback    = function()
+        local npc = BoneNPCs[_G.SelectedBoneNPC]
+        if npc then
+            Warp(npc.MonsterCFrame)
+            Fluent:Notify({ Title = "Teleported", Content = "Warped to " .. _G.SelectedBoneNPC .. " spawn", Duration = 3 })
+        else
+            Fluent:Notify({ Title = "Error", Content = "Select an NPC first!", Duration = 3 })
+        end
+    end,
+})
+
+-- ── Tab: Info ─────────────────────────────────────────────────────────────────
+local InfoTab = Window:AddTab({ Title = "NPC Info", Icon = "info" })
+InfoTab:AddSection("All Bone NPCs")
+
+for _, name in ipairs(npcList) do
+    local d = BoneNPCs[name]
+    InfoTab:AddParagraph({
+        Title   = name,
+        Content = "Sea: " .. d.Sea
+                .. " | Min Level: " .. d.MinLevel
+                .. "\nQuest: " .. d.QuestName .. " (Level " .. d.QuestLevel .. ")",
+    })
+end
+
+-- ─── SaveManager & InterfaceManager ──────────────────────────────────────────
+pcall(function()
+    SaveManager:SetLibrary(Fluent)
+    InterfaceManager:SetLibrary(Fluent)
+    SaveManager:IgnoreThemeSettings()
+    SaveManager:SetIgnoreIndexes({})
+    InterfaceManager:SetFolder("BonesFarm")
+    SaveManager:SetFolder("BonesFarm/config")
+    InterfaceManager:BuildInterfaceSection(Window:AddTab({ Title = "Settings", Icon = "settings" }))
+    SaveManager:BuildConfigSection(Window:AddTab({ Title = "Config", Icon = "save" }))
+    SaveManager:LoadAutoloadConfig()
+end)
+
+-- ─── Ready Notification ───────────────────────────────────────────────────────
+Fluent:Notify({
+    Title   = "🦴 Bones Farm Loaded",
+    Content = "Select your NPC from the dropdown and enable Auto Farm!",
+    Duration = 6,
+})
+
+Window:SelectTab(1)
 -- ─── NPC Database ────────────────────────────────────────────────────────────
 --  Each entry: Sea, QuestCFrame, QuestName, QuestLevel,
 --              MonsterName (exact in-game tag), MonsterCFrame, MinLevel
